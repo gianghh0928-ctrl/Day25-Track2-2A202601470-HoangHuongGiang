@@ -102,3 +102,92 @@ def spot_checkpoint_cost(
         "on_demand_cost": round(on_demand_cost, 2),
         "savings_pct": round(savings_pct, 1),
     }
+
+
+def recommend_tier_advanced(
+    hours_per_day: float,
+    interruptible: bool,
+    on_demand_hr: float = 1.0,
+    spot_hr: float = 0.3,
+    interrupt_rate: float = 0.05,
+    reserved_1yr_discount: float = 0.30,
+    reserved_3yr_discount: float = 0.45,
+) -> dict:
+    """Advanced purchasing tier recommendation considering interruption rate and 1yr vs 3yr commitment.
+
+    Extension 'Your Turn' #1:
+    Compares effective costs for On-Demand, Spot (with rework), Reserved 1yr, and Reserved 3yr.
+    """
+    duty = max(0.0, hours_per_day) / 24.0
+    on_demand_cost = hours_per_day * on_demand_hr
+    res_1yr_cost = 24.0 * on_demand_hr * (1.0 - reserved_1yr_discount)
+    res_3yr_cost = 24.0 * on_demand_hr * (1.0 - reserved_3yr_discount)
+
+    if interruptible:
+        ckpt_res = spot_checkpoint_cost(
+            job_hours=hours_per_day,
+            spot_hr=spot_hr,
+            on_demand_hr=on_demand_hr,
+            interrupt_rate=interrupt_rate,
+        )
+        spot_cost = ckpt_res["spot_cost"]
+    else:
+        spot_cost = float("inf")
+
+    costs = {
+        "on_demand": on_demand_cost,
+        "spot": spot_cost,
+        "reserved_1yr": res_1yr_cost,
+        "reserved_3yr": res_3yr_cost,
+    }
+
+    best_tier = min(costs, key=costs.get)
+    return {
+        "recommended_tier": best_tier,
+        "duty_cycle": round(duty, 3),
+        "costs_24h": {k: round(v, 2) for k, v in costs.items() if v != float("inf")},
+    }
+
+
+def cache_is_worth_it(
+    cache_hit_frac: float,
+    min_hit_threshold: float = 0.20,
+    cache_discount: float = 0.10,
+    write_overhead_pct: float = 0.05,
+) -> dict:
+    """Evaluate whether prompt caching is economically beneficial based on cache read hit rate.
+
+    Extension 'Your Turn' #3:
+    Prompt caching saves money on reads but introduces write/storage overhead.
+    """
+    gross_savings = cache_hit_frac * (1.0 - cache_discount)
+    net_savings = gross_savings - write_overhead_pct
+    is_worth_it = cache_hit_frac >= min_hit_threshold and net_savings > 0
+
+    return {
+        "is_worth_it": is_worth_it,
+        "cache_hit_frac": cache_hit_frac,
+        "min_hit_threshold": min_hit_threshold,
+        "net_savings_pct": round(max(0.0, net_savings) * 100.0, 1),
+    }
+
+
+def reasoning_cost_audit(token_df) -> dict:
+    """Audit token usage and costs specifically for reasoning traffic.
+
+    Extension 'Your Turn' #4:
+    Calculates proportion of token volume consumed by reasoning workloads.
+    """
+    if "is_reasoning" not in token_df.columns:
+        return {"reasoning_count": 0, "reasoning_token_share_pct": 0.0}
+
+    reasoning_df = token_df[token_df["is_reasoning"] == True]
+    reasoning_tokens = (reasoning_df["input_tokens"] + reasoning_df["output_tokens"]).sum() if len(reasoning_df) > 0 else 0
+    total_tokens = (token_df["input_tokens"] + token_df["output_tokens"]).sum() if len(token_df) > 0 else 1
+
+    return {
+        "reasoning_request_count": len(reasoning_df),
+        "total_request_count": len(token_df),
+        "reasoning_token_share_pct": round((reasoning_tokens / total_tokens) * 100.0, 1),
+    }
+

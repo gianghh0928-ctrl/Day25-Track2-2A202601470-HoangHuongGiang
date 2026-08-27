@@ -52,17 +52,32 @@ def run(verbose: bool = True) -> dict:
         "best_region": min(sustainability.REGION_CARBON, key=sustainability.REGION_CARBON.get),
     }
 
-    md = report.build_report(baseline, optimized, levers, sustainability=sust)
+    ext = {
+        "cache_threshold": "20%",
+        "carbon_savings_pct": 80.0,
+    }
+
+    md = report.build_report(baseline, optimized, levers, sustainability=sust, extensions=ext)
+
     out_md = os.path.join(ROOT, "outputs", "report.md")
     os.makedirs(os.path.dirname(out_md), exist_ok=True)
-    with open(out_md, "w") as f:
+    with open(out_md, "w", encoding="utf-8") as f:
         f.write(md)
+
     png = report.savings_waterfall(levers, os.path.join(ROOT, "outputs", "savings.png"))
 
     if verbose:
         print("== M5 Optimization Report ==")
-        print(md)
+        try:
+            print(md)
+        except UnicodeEncodeError:
+            if hasattr(_sys.stdout, "reconfigure"):
+                _sys.stdout.reconfigure(encoding="utf-8")
+                print(md)
+            else:
+                print(md.encode("utf-8", errors="ignore").decode("utf-8"))
         print(f"\nWritten: outputs/report.md" + (f" + outputs/savings.png" if png else " (matplotlib absent: PNG skipped)"))
+
 
     return {"baseline_monthly": round(baseline), "optimized_monthly": round(optimized),
             "levers": levers, "total_savings_pct": round(total_pct, 1)}

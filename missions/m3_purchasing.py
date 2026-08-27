@@ -43,6 +43,17 @@ def run(verbose: bool = True) -> dict:
     savings = on_demand_monthly - optimized_monthly
     savings_pct = savings / on_demand_monthly * 100 if on_demand_monthly else 0.0
 
+    # Your Turn Extension: Advanced tier recommendations
+    advanced_recs = []
+    for j in jobs:
+        adv = pricing.recommend_tier_advanced(
+            hours_per_day=num(j["hours_per_day"]),
+            interruptible=bool(int(num(j["interruptible"]))),
+            on_demand_hr=num(cat[j["gpu_type"]]["on_demand_hr"]),
+            spot_hr=num(cat[j["gpu_type"]]["spot_hr"]),
+        )
+        advanced_recs.append({"job_id": j["job_id"], "adv_tier": adv["recommended_tier"]})
+
     if verbose:
         print("== M3 Purchasing Strategy ==")
         print(f"break-even utilization @ 45% reserved discount = {pricing.break_even_utilization(0.45):.0%}")
@@ -52,7 +63,9 @@ def run(verbose: bool = True) -> dict:
         print(f"\nmonthly: on-demand ${on_demand_monthly:,.0f} -> optimized ${optimized_monthly:,.0f}  ({savings_pct:.1f}% saved)")
 
     return {"recommendations": recs, "on_demand_monthly": round(on_demand_monthly),
-            "optimized_monthly": round(optimized_monthly), "savings_pct": round(savings_pct, 1)}
+            "optimized_monthly": round(optimized_monthly), "savings_pct": round(savings_pct, 1),
+            "advanced_recommendations": advanced_recs}
+
 
 
 if __name__ == "__main__":
